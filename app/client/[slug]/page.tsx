@@ -20,6 +20,118 @@ type ProjectInfo = {
   error?: string;
 };
 
+// ─── Milestone Timeline ────────────────────────────────────────────────────
+
+const STATUS_DOT_COLORS: Record<string, string> = {
+  upcoming:    '#60A5FA',
+  in_progress: '#F59E0B',
+  completed:   '#10B981',
+  delayed:     '#EF4444',
+};
+
+function MilestoneTimeline({ milestones, color }: { milestones: Milestone[]; color: string }) {
+  const dated = milestones.filter(m => m.due_date);
+  if (dated.length < 2) return null; // Need at least 2 points for a meaningful timeline
+
+  const sorted = [...dated].sort((a, b) =>
+    new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime()
+  );
+
+  const minTs = new Date(sorted[0].due_date!).getTime();
+  const maxTs = new Date(sorted[sorted.length - 1].due_date!).getTime();
+  const range = maxTs - minTs || 1;
+
+  const nowTs = Date.now();
+  const nowPct = Math.min(1, Math.max(0, (nowTs - minTs) / range));
+
+  // SVG layout
+  const W = 700;
+  const H = 80;
+  const PAD = 40;
+  const trackW = W - PAD * 2;
+  const trackY = 36;
+  const nodeR = 9;
+
+  function xOf(ts: number) { return PAD + ((ts - minTs) / range) * trackW; }
+
+  const [tooltip, setTooltip] = React.useState<{ ms: Milestone; x: number } | null>(null);
+
+  return (
+    <div className="mb-6 overflow-x-auto">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full min-w-[400px]"
+        style={{ height: H }}
+        onMouseLeave={() => setTooltip(null)}
+      >
+        {/* Background track */}
+        <line x1={PAD} y1={trackY} x2={W - PAD} y2={trackY} stroke="#E5E7EB" strokeWidth={4} strokeLinecap="round" />
+
+        {/* Filled track up to today */}
+        <line
+          x1={PAD} y1={trackY}
+          x2={PAD + nowPct * trackW} y2={trackY}
+          stroke={color} strokeWidth={4} strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 1s ease' }}
+        />
+
+        {/* Milestone nodes */}
+        {sorted.map(ms => {
+          const x = xOf(new Date(ms.due_date!).getTime());
+          const dotColor = STATUS_DOT_COLORS[ms.status] || '#94A3B8';
+          return (
+            <g
+              key={ms.id}
+              onMouseEnter={() => setTooltip({ ms, x })}
+              style={{ cursor: 'pointer' }}
+            >
+              <circle cx={x} cy={trackY} r={nodeR + 4} fill="transparent" />
+              <circle cx={x} cy={trackY} r={nodeR} fill="white" stroke={dotColor} strokeWidth={3} />
+              {ms.status === 'completed' && (
+                <text x={x} y={trackY + 4} textAnchor="middle" fontSize={10} fill={dotColor} fontWeight="bold">✓</text>
+              )}
+              {/* Date label below */}
+              <text x={x} y={trackY + 22} textAnchor="middle" fontSize={9} fill="#9CA3AF">
+                {new Date(ms.due_date!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Today marker */}
+        {nowPct > 0 && nowPct < 1 && (
+          <g>
+            <line
+              x1={PAD + nowPct * trackW} y1={trackY - 14}
+              x2={PAD + nowPct * trackW} y2={trackY + 14}
+              stroke={color} strokeWidth={1.5} strokeDasharray="3 2"
+            />
+            <text x={PAD + nowPct * trackW} y={trackY - 18} textAnchor="middle" fontSize={8} fill={color} fontWeight="600">
+              Today
+            </text>
+          </g>
+        )}
+      </svg>
+
+      {/* Tooltip — rendered as HTML overlay */}
+      {tooltip && (
+        <div
+          className="mt-1 bg-neutral-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg inline-block"
+          style={{ marginLeft: `${(tooltip.x / W) * 100}%`, transform: 'translateX(-50%)' }}
+        >
+          <p className="font-semibold">{tooltip.ms.title}</p>
+          <p className="text-neutral-400">
+            Due {new Date(tooltip.ms.due_date!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </p>
+          <p className="text-neutral-400">{tooltip.ms.progress}% complete</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
   upcoming:    { label: 'Upcoming',    bg: 'bg-blue-50',   text: 'text-blue-700',   dot: '#60A5FA' },
   in_progress: { label: 'In Progress', bg: 'bg-amber-50',  text: 'text-amber-700',  dot: '#F59E0B' },
@@ -262,6 +374,9 @@ export default function ClientPortalPage({ params }: Props) {
         {/* Milestones */}
         <div>
           <h2 className="text-lg font-bold text-neutral-900 mb-4">Project Milestones</h2>
+
+          {/* SVG Timeline — only when milestones have due dates */}
+          <MilestoneTimeline milestones={milestones} color={color} />
 
           {milestones.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border border-neutral-200">
