@@ -152,7 +152,7 @@ $$ language plpgsql security definer;
 
 -- RPC: get client-visible milestones (no auth required)
 create or replace function get_client_milestones(p_project_id uuid)
-returns table (id uuid, title text, description text, due_date date, progress int, status text, position int) as $$
+returns table (id uuid, title text, description text, due_date date, progress int, status text, "position" int) as $$
 begin
   return query
     select m.id, m.title, m.description, m.due_date, m.progress, m.status, m.position
