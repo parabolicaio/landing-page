@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { createClient } from '../../lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import TaskActivityFeed from './TaskActivityFeed';
 
 const COLUMNS = [
   { id: 'backlog',     label: 'Backlog',      color: '#94A3B8' },
@@ -89,8 +90,19 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
   }
 
   async function updateTaskStatus(taskId: string, newStatus: string) {
+    const oldTask = tasks.find(t => t.id === taskId);
     setTasks(t => t.map(task => task.id === taskId ? { ...task, status: newStatus } : task));
     await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
+    // Log activity
+    if (oldTask && oldTask.status !== newStatus) {
+      await supabase.from('task_activity').insert({
+        task_id: taskId,
+        user_id: currentUserId,
+        type: 'status_change',
+        from_value: oldTask.status,
+        to_value: newStatus,
+      });
+    }
     router.refresh();
   }
 
@@ -290,6 +302,7 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
           onSave={saveTask}
           onClose={() => setEditTask(null)}
           loading={loading}
+          currentUserId={currentUserId}
         />
       )}
 
@@ -370,11 +383,12 @@ function TaskCard({ task, onEdit, onDelete, onMove }: {
   );
 }
 
-function TaskEditModal({ task, members, onSave, onClose, loading }: {
+function TaskEditModal({ task, members, onSave, onClose, loading, currentUserId }: {
   task: Task; members: Member[];
   onSave: (updates: Partial<Task>) => void;
   onClose: () => void;
   loading: boolean;
+  currentUserId: string;
 }) {
   const [form, setForm] = useState({
     title: task.title,
@@ -433,6 +447,17 @@ function TaskEditModal({ task, members, onSave, onClose, loading }: {
             </div>
           </div>
         </div>
+        {/* Activity feed */}
+        <div className="px-5 pb-2">
+          <TaskActivityFeed
+            taskId={task.id}
+            currentUserId={currentUserId}
+            memberNames={Object.fromEntries(
+              members.map(m => [m.user_id, m.profiles?.full_name || m.user_id.slice(0, 8)])
+            )}
+          />
+        </div>
+
         <div className="flex gap-3 p-5 border-t border-neutral-100">
           <button onClick={onClose} className="flex-1 py-2 border border-neutral-200 text-sm rounded-lg hover:bg-neutral-50">Cancel</button>
           <button

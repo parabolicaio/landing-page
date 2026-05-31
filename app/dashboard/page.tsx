@@ -3,18 +3,23 @@ import { createClient } from '../../lib/supabase/server';
 import Link from 'next/link';
 import NewProjectModal from '../../components/dashboard/NewProjectModal';
 
+type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+
+const STATUS_DOTS: Record<TaskStatus, string> = {
+  backlog:     '#94A3B8',
+  todo:        '#60A5FA',
+  in_progress: '#F59E0B',
+  review:      '#A78BFA',
+  done:        '#10B981',
+};
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   const { data: memberships } = await supabase
     .from('project_members')
-    .select(`
-      role,
-      projects (
-        id, name, slug, description, color, client_name, created_at
-      )
-    `)
+    .select(`role, projects (id, name, slug, description, color, client_name, created_at)`)
     .eq('user_id', user!.id);
 
   const projects = (memberships || []).map(m => ({
@@ -23,21 +28,75 @@ export default async function DashboardPage() {
     role: m.role,
   }));
 
-  // Fetch task counts per project in a single query
+  if (projects.length === 0) {
+    return (
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-neutral-900">Projects</h1>
+            <p className="mt-1 text-sm text-neutral-500">No projects yet — create one to get started.</p>
+          </div>
+          <NewProjectModal userId={user!.id} />
+        </div>
+        <div className="text-center py-24 border-2 border-dashed border-neutral-200 rounded-surface">
+          <div className="text-4xl mb-3">📋</div>
+          <p className="text-neutral-500 text-sm">No projects yet</p>
+          <p className="text-neutral-400 text-xs mt-1">Create your first project above</p>
+        </div>
+      </div>
+    );
+  }
+
   const projectIds = projects.map((p: { id: string }) => p.id);
-  const { data: allTasks } = projectIds.length > 0
-    ? await supabase
-        .from('tasks')
-        .select('project_id, status')
-        .in('project_id', projectIds)
-    : { data: [] };
+
+  // Fetch tasks + members in 2 queries (not N)
+  const today = new Date().toISOString().split('T')[0];
+  const sevenDaysFromNow = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+
+  const [{ data: allTasks }, { data: allMembers }] = await Promise.all([
+    supabase
+      .from('tasks')
+      .select('project_id, status, due_date')
+      .in('project_id', projectIds),
+    supabase
+      .from('project_members')
+      .select('project_id, user_id, profiles(full_name)')
+      .in('project_id', projectIds),
+  ]);
 
   const projectsWithStats = projects.map((p: { id: string; [key: string]: unknown }) => {
     const tasks = (allTasks || []).filter(t => t.project_id === p.id);
+
+    // Status counts
+    const statusCounts: Record<string, number> = {};
+    tasks.forEach(t => { statusCounts[t.status] = (statusCounts[t.status] || 0) + 1; });
+
+    // Nearest upcoming due date (within 7 days or overdue)
+    let nearestDue: { date: string; overdue: boolean } | null = null;
+    tasks.forEach(t => {
+      if (!t.due_date || t.status === 'done') return;
+      const isOverdue = t.due_date < today;
+      const isUpcoming = t.due_date >= today && t.due_date <= sevenDaysFromNow;
+      if (isOverdue || isUpcoming) {
+        if (!nearestDue || t.due_date < nearestDue.date) {
+          nearestDue = { date: t.due_date, overdue: isOverdue };
+        }
+      }
+    });
+
+    // Member avatars
+    const members = (allMembers || [])
+      .filter(m => m.project_id === p.id)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map(m => ({ user_id: m.user_id, full_name: (Array.isArray((m as any).profiles) ? (m as any).profiles[0]?.full_name : (m as any).profiles?.full_name) ?? null }));
+
     return {
       ...p,
       taskTotal: tasks.length,
       taskDone: tasks.filter(t => t.status === 'done').length,
+      statusCounts,
+      nearestDue,
+      members,
     };
   });
 
@@ -47,36 +106,29 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-neutral-900">Projects</h1>
           <p className="mt-1 text-sm text-neutral-500">
-            {projects.length === 0
-              ? 'No projects yet — create one to get started.'
-              : `${projects.length} project${projects.length > 1 ? 's' : ''} you're part of`}
+            {projects.length} project{projects.length > 1 ? 's' : ''} you&apos;re part of
           </p>
         </div>
         <NewProjectModal userId={user!.id} />
       </div>
 
-      {projectsWithStats.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projectsWithStats.map((p) => (
-            <ProjectCard key={p.id as string} project={p} />
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-24 border-2 border-dashed border-neutral-200 rounded-surface">
-          <div className="text-4xl mb-3">📋</div>
-          <p className="text-neutral-500 text-sm">No projects yet</p>
-          <p className="text-neutral-400 text-xs mt-1">Create your first project above</p>
-        </div>
-      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {projectsWithStats.map(p => (
+          <ProjectCard key={p.id as string} project={p} />
+        ))}
+      </div>
     </div>
   );
 }
 
 function ProjectCard({ project }: { project: Record<string, unknown> }) {
   const taskTotal = project.taskTotal as number;
-  const taskDone = project.taskDone as number;
-  const progress = taskTotal > 0 ? Math.round((taskDone / taskTotal) * 100) : 0;
-  const color = (project.color as string) || '#0FBAB0';
+  const taskDone  = project.taskDone  as number;
+  const progress  = taskTotal > 0 ? Math.round((taskDone / taskTotal) * 100) : 0;
+  const color     = (project.color as string) || '#0FBAB0';
+  const statusCounts = (project.statusCounts as Record<string, number>) || {};
+  const nearestDue   = project.nearestDue as { date: string; overdue: boolean } | null;
+  const members      = (project.members as Array<{ user_id: string; full_name: string | null }>) || [];
 
   return (
     <Link href={`/dashboard/${project.id}`} className="group block">
@@ -99,21 +151,68 @@ function ProjectCard({ project }: { project: Record<string, unknown> }) {
         )}
 
         {project.description && (
-          <p className="text-sm text-neutral-500 line-clamp-2 mb-4">{project.description as string}</p>
+          <p className="text-sm text-neutral-500 line-clamp-2 mb-3">{project.description as string}</p>
         )}
 
-        <div className="mt-4">
+        {/* Status dots */}
+        {taskTotal > 0 && (
+          <div className="flex items-center gap-1.5 mb-3">
+            {(Object.entries(STATUS_DOTS) as [TaskStatus, string][]).map(([status, dotColor]) => {
+              const count = statusCounts[status] || 0;
+              if (count === 0) return null;
+              return (
+                <div key={status} className="flex items-center gap-0.5" title={`${status}: ${count}`}>
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
+                  <span className="text-[10px] text-neutral-400">{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Upcoming / overdue due date */}
+        {nearestDue && (
+          <div className={`flex items-center gap-1 text-[11px] font-semibold mb-3 ${
+            nearestDue.overdue ? 'text-red-600' : 'text-amber-600'
+          }`}>
+            <span>{nearestDue.overdue ? '⚠ Overdue' : '📅 Due soon'}:</span>
+            <span>{new Date(nearestDue.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+          </div>
+        )}
+
+        {/* Progress bar */}
+        <div className="mt-2">
           <div className="flex justify-between text-xs text-neutral-400 mb-1.5">
-            <span>{taskDone}/{taskTotal} tasks done</span>
+            <span>{taskDone}/{taskTotal} done</span>
             <span>{progress}%</span>
           </div>
           <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all"
-              style={{ width: `${progress}%`, backgroundColor: color }}
-            />
+            <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, backgroundColor: color }} />
           </div>
         </div>
+
+        {/* Member avatars */}
+        {members.length > 0 && (
+          <div className="flex items-center mt-3">
+            <div className="flex -space-x-1.5">
+              {members.slice(0, 3).map(m => {
+                const initials = (m.full_name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+                return (
+                  <div
+                    key={m.user_id}
+                    title={m.full_name || m.user_id}
+                    className="w-6 h-6 rounded-full bg-parabolica/20 border-2 border-white flex items-center justify-center text-[9px] font-bold text-parabolica"
+                  >
+                    {initials}
+                  </div>
+                );
+              })}
+            </div>
+            {members.length > 3 && (
+              <span className="ml-1.5 text-[10px] text-neutral-400">+{members.length - 3} more</span>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );
