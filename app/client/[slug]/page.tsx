@@ -1,9 +1,9 @@
 'use client';
-import React, { useState, useEffect, use } from 'react';
+import React, { useState } from 'react';
 import { createClient } from '../../../lib/supabase/client';
 
 interface Props {
-  params: Promise<{ slug: string }>;
+  params: { slug: string };
 }
 
 type Milestone = {
@@ -101,7 +101,7 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; d
 
 export default function ClientPortalPage({ params }: Props) {
   // Unwrap params using React.use() — correct way in Next.js 15
-  const { slug } = use(params);
+  const { slug } = params;
 
   const [pinDigits, setPinDigits] = useState(['', '', '', '', '', '']);
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);

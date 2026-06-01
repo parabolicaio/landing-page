@@ -4,11 +4,11 @@ import { notFound } from 'next/navigation';
 import AdminProjectEditor from '../../../../components/admin/AdminProjectEditor';
 
 interface Props {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 export default async function AdminProjectDetailPage({ params }: Props) {
-  const { id } = await params;
+  const { id } = params;
   const supabase = await createClient();
 
   const [

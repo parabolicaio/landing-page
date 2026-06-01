@@ -5,11 +5,11 @@ import KanbanBoard from '../../../components/dashboard/KanbanBoard';
 import Link from 'next/link';
 
 interface Props {
-  params: Promise<{ projectId: string }>;
+  params: { projectId: string };
 }
 
 export default async function ProjectPage({ params }: Props) {
-  const { projectId } = await params;
+  const { projectId } = params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
