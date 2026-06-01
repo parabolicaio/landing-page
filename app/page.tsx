@@ -1,5 +1,6 @@
 'use client';
 import React, { useEffect, useState, useRef } from 'react';
+import Header from '../components/layout/Header';
 import site from '../content/site';
 import Container from '../components/ui/Container';
 import Section from '../components/ui/Section';
@@ -104,6 +105,7 @@ export default function HomePage() {
 
   return (
     <main>
+      <Header />
       {/* Hero */}
       <Section id="hero" className="min-h-[50vh] flex items-center py-12 md:py-20">
         <div className="w-full bg-gradient-to-br from-parabolica-700 to-parabolica text-white rounded-surface p-8 md:p-16">
