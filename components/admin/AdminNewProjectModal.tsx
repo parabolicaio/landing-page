@@ -23,7 +23,7 @@ export default function AdminNewProjectModal() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true); setError('');
-    if (form.client_pin.length < 4) { setError('PIN must be at least 4 digits.'); setLoading(false); return; }
+    if (form.client_pin.length < 4 || form.client_pin.length > 5) { setError('PIN must be 4 or 5 digits.'); setLoading(false); return; }
 
     const { data: hash, error: hashErr } = await supabase.rpc('hash_pin', { p_pin: form.client_pin });
     if (hashErr) { setError(hashErr.message); setLoading(false); return; }
@@ -31,7 +31,7 @@ export default function AdminNewProjectModal() {
     const { error: err } = await supabase.from('projects').insert({
       name: form.name, slug: form.slug,
       description: form.description || null,
-      client_pin: hash, color: form.color,
+      client_pin: hash, pin_length: form.client_pin.length, color: form.color,
     });
     if (err) { setError(err.message); setLoading(false); return; }
     close(); router.refresh();
@@ -55,7 +55,7 @@ export default function AdminNewProjectModal() {
                 { label: 'Project name *', key: 'name', type: 'text', placeholder: 'Acme Corp Website', required: true },
                 { label: 'URL slug *', key: 'slug', type: 'text', placeholder: 'acme-corp-website', required: true },
                 { label: 'Description', key: 'description', type: 'text', placeholder: 'Optional…', required: false },
-                { label: 'Client PIN * (min 4 digits)', key: 'client_pin', type: 'password', placeholder: '••••', required: true },
+                { label: 'Client PIN * (4–5 digits)', key: 'client_pin', type: 'password', placeholder: '••••', required: true },
               ].map(f => (
                 <div key={f.key}>
                   <label className="block text-xs font-medium text-neutral-600 mb-1.5">{f.label}</label>

@@ -99,11 +99,14 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; d
   delayed:     { label: 'Delayed',     bg: 'bg-red-50',    text: 'text-red-700',    dot: '#EF4444' },
 };
 
+const MAX_PIN_LENGTH = 5;
+
 export default function ClientPortalPage({ params }: Props) {
-  // Unwrap params using React.use() — correct way in Next.js 15
   const { slug } = params;
 
-  const [pinDigits, setPinDigits] = useState(['', '', '', '', '', '']);
+  // Box count matches the project's PIN length (fetched below; defaults to 4)
+  const [pinLength, setPinLength] = useState(4);
+  const [pinDigits, setPinDigits] = useState<string[]>(Array(4).fill(''));
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(false);
@@ -111,9 +114,22 @@ export default function ClientPortalPage({ params }: Props) {
   const [shake, setShake] = useState(false);
   const supabase = createClient();
 
-  async function verifyPin() {
-    const fullPin = pinDigits.join('');
-    if (fullPin.length < 4) return;
+  React.useEffect(() => {
+    let mounted = true;
+    supabase.rpc('get_client_pin_length', { p_slug: slug }).then(({ data }) => {
+      if (!mounted || !data) return;
+      const len = Math.min(Number(data), MAX_PIN_LENGTH);
+      if (len >= 4) {
+        setPinLength(len);
+        setPinDigits(Array(len).fill(''));
+      }
+    });
+    return () => { mounted = false; };
+  }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function verifyPin(digits?: string[]) {
+    const fullPin = (digits || pinDigits).join('');
+    if (fullPin.length < pinLength) return;
     setLoading(true);
     setError('');
 
@@ -126,7 +142,8 @@ export default function ClientPortalPage({ params }: Props) {
       setError(data?.error === 'not_found' ? 'Project not found.' : 'Incorrect PIN. Please try again.');
       setShake(true);
       setTimeout(() => setShake(false), 500);
-      setPinDigits(['', '', '', '', '', '']);
+      setPinDigits(Array(pinLength).fill(''));
+      document.getElementById('pin-0')?.focus();
       setLoading(false);
       return;
     }
@@ -146,11 +163,12 @@ export default function ClientPortalPage({ params }: Props) {
     const next = [...pinDigits];
     next[index] = value.slice(-1);
     setPinDigits(next);
-    if (value && index < 5) {
+    if (value && index < pinLength - 1) {
       document.getElementById(`pin-${index + 1}`)?.focus();
     }
-    if (next.filter(Boolean).length >= 4 && next.every((d, i) => i >= 4 || d)) {
-      setTimeout(() => verifyPin(), 100);
+    // Auto-verify once every box is filled
+    if (next.every(d => d)) {
+      setTimeout(() => verifyPin(next), 100);
     }
   }
 
@@ -201,7 +219,7 @@ export default function ClientPortalPage({ params }: Props) {
               <div className="mb-4 text-center text-sm text-red-400 bg-red-900/20 border border-red-800/30 rounded-lg px-4 py-2.5">{error}</div>
             )}
 
-            <button onClick={verifyPin} disabled={loading || pinDigits.filter(Boolean).length < 4}
+            <button onClick={() => verifyPin()} disabled={loading || pinDigits.some(d => !d)}
               className="w-full py-3 bg-parabolica text-white font-semibold rounded-xl hover:bg-parabolica-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
               {loading ? (
                 <span className="flex items-center justify-center gap-2">

@@ -52,8 +52,8 @@ export default function NewProjectModal({ userId }: { userId: string }) {
     setLoading(true);
     setError('');
 
-    if (form.client_pin.length < 4) {
-      setError('PIN must be at least 4 digits.');
+    if (form.client_pin.length < 4 || form.client_pin.length > 5) {
+      setError('PIN must be 4 or 5 digits.');
       setLoading(false);
       return;
     }
@@ -74,6 +74,7 @@ export default function NewProjectModal({ userId }: { userId: string }) {
         client_name: form.client_name || null,
         slug: form.slug,
         client_pin: hashData,
+        pin_length: form.client_pin.length,
         color: form.color,
       })
       .select()
@@ -131,8 +132,8 @@ export default function NewProjectModal({ userId }: { userId: string }) {
                 <input value={form.client_name} onChange={e => update('client_name', e.target.value)} className={inputCls} placeholder="e.g. Acme Corp" />
               </Field>
 
-              <Field label="Client PIN * (min 4 digits)">
-                <input required type="password" value={form.client_pin} onChange={e => update('client_pin', e.target.value)} className={inputCls} placeholder="e.g. 4821" minLength={4} maxLength={10} />
+              <Field label="Client PIN * (4–5 digits)">
+                <input required type="password" value={form.client_pin} onChange={e => update('client_pin', e.target.value)} className={inputCls} placeholder="e.g. 4821" minLength={4} maxLength={5} />
                 <p className="text-[11px] text-neutral-400 mt-1">Share this PIN with your client to access their progress board.</p>
               </Field>
 
