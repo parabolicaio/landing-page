@@ -49,6 +49,19 @@ export default async function ProjectPage({ params }: Props) {
     .select('user_id, role, profiles(full_name)')
     .eq('project_id', projectId);
 
+  const [{ data: links }, { data: messages }] = await Promise.all([
+    supabase
+      .from('project_links')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('position', { ascending: true }),
+    supabase
+      .from('project_messages')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false }),
+  ]);
+
   // Normalise the profiles join (Supabase can return array or object)
   const members = (rawMembers || []).map((m) => ({
     user_id: m.user_id,
@@ -94,6 +107,8 @@ export default async function ProjectPage({ params }: Props) {
         project={project}
         initialTasks={tasks || []}
         initialMilestones={milestones || []}
+        initialLinks={links || []}
+        initialMessages={messages || []}
         members={members}
         currentUserId={user.id}
         isAdmin={membership.role === 'admin'}

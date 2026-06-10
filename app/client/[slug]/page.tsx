@@ -20,6 +20,20 @@ type ProjectInfo = {
   error?: string;
 };
 
+type ClientLink = { id: string; label: string; url: string; position: number };
+
+type ClientMessage = {
+  id: string; title: string; body: string | null;
+  level: string; pinned: boolean; created_at: string;
+};
+
+const MESSAGE_LEVELS: Record<string, { color: string; bg: string; border: string; icon: string }> = {
+  info:    { color: '#1D4ED8', bg: '#EFF6FF', border: '#BFDBFE', icon: 'ℹ️' },
+  success: { color: '#047857', bg: '#ECFDF5', border: '#A7F3D0', icon: '✅' },
+  warning: { color: '#B45309', bg: '#FFFBEB', border: '#FDE68A', icon: '⚠️' },
+  urgent:  { color: '#B91C1C', bg: '#FEF2F2', border: '#FECACA', icon: '🚨' },
+};
+
 // ─── Milestone Timeline ────────────────────────────────────────────────────
 
 const STATUS_DOT_COLORS: Record<string, string> = {
@@ -109,6 +123,8 @@ export default function ClientPortalPage({ params }: Props) {
   const [pinDigits, setPinDigits] = useState<string[]>(Array(4).fill(''));
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [quickLinks, setQuickLinks] = useState<ClientLink[]>([]);
+  const [clientMessages, setClientMessages] = useState<ClientMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [shake, setShake] = useState(false);
@@ -150,11 +166,15 @@ export default function ClientPortalPage({ params }: Props) {
 
     setProjectInfo(data);
 
-    const { data: msData } = await supabase.rpc('get_client_milestones', {
-      p_project_id: data.project_id,
-    });
+    const [{ data: msData }, { data: linkData }, { data: msgData }] = await Promise.all([
+      supabase.rpc('get_client_milestones', { p_project_id: data.project_id }),
+      supabase.rpc('get_client_links', { p_project_id: data.project_id }),
+      supabase.rpc('get_client_messages', { p_project_id: data.project_id }),
+    ]);
 
     setMilestones(msData || []);
+    setQuickLinks(linkData || []);
+    setClientMessages(msgData || []);
     setLoading(false);
   }
 
@@ -293,6 +313,57 @@ export default function ClientPortalPage({ params }: Props) {
             </div>
           </div>
         </div>
+
+        {/* Important messages from the team */}
+        {clientMessages.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-lg font-bold text-neutral-900 mb-3">Updates from the team</h2>
+            <div className="space-y-2.5">
+              {clientMessages.map(msg => {
+                const lv = MESSAGE_LEVELS[msg.level] || MESSAGE_LEVELS.info;
+                return (
+                  <div key={msg.id} className="rounded-xl border p-4"
+                    style={{ backgroundColor: lv.bg, borderColor: lv.border }}>
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-base leading-none mt-0.5">{lv.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold" style={{ color: lv.color }}>{msg.title}</p>
+                          {msg.pinned && <span className="text-[10px]" style={{ color: lv.color }}>📌</span>}
+                        </div>
+                        {msg.body && <p className="text-sm text-neutral-600 mt-1">{msg.body}</p>}
+                        <p className="text-[11px] text-neutral-400 mt-1.5">
+                          {new Date(msg.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Quick access links */}
+        {quickLinks.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-lg font-bold text-neutral-900 mb-3">Quick access</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {quickLinks.map(l => (
+                <a key={l.id} href={l.url} target="_blank" rel="noopener noreferrer"
+                  className="group flex items-center gap-3 bg-white rounded-xl border border-neutral-200 p-4 hover:shadow-md transition-all"
+                  style={{ borderLeftWidth: 3, borderLeftColor: color }}>
+                  <span className="text-lg">🔗</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-neutral-900 group-hover:underline">{l.label}</p>
+                    <p className="text-[11px] text-neutral-400 truncate">{l.url.replace(/^https?:\/\//, '')}</p>
+                  </div>
+                  <span className="text-neutral-300 group-hover:text-neutral-500 transition-colors">↗</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           {[
