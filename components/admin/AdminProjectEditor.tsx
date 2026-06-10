@@ -144,7 +144,7 @@ export default function AdminProjectEditor({ project, clients, members: initMemb
         <form onSubmit={updatePin} className="flex gap-3">
           <input
             type="password" value={pinValue} onChange={e => setPinValue(e.target.value)}
-            className={inputCls + ' max-w-48'} placeholder="New PIN (min 4 digits)" minLength={4} maxLength={10} required
+            className={inputCls + ' max-w-48'} placeholder="New PIN (4–5 digits)" minLength={4} maxLength={5} required
           />
           <button type="submit" disabled={pinSaving || pinValue.length < 4}
             className="px-4 py-2 bg-parabolica text-white text-sm font-semibold rounded-lg hover:bg-parabolica-700 disabled:opacity-50">

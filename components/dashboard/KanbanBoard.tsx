@@ -61,6 +61,7 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
   const [editMilestone, setEditMilestone] = useState<Milestone | null>(null);
   const [showNewMilestone, setShowNewMilestone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [boardError, setBoardError] = useState('');
   const supabase = createClient();
   const router = useRouter();
 
@@ -71,6 +72,7 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
   async function addTask(status: string) {
     if (!newTaskTitle.trim()) return;
     setLoading(true);
+    setBoardError('');
     const { data, error } = await supabase
       .from('tasks')
       .insert({
@@ -83,7 +85,12 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
       .select('*, profiles(full_name)')
       .single();
 
-    if (!error && data) setTasks(t => [...t, data as Task]);
+    if (error) {
+      setBoardError('Failed to add task: ' + error.message);
+      setLoading(false);
+      return;
+    }
+    if (data) setTasks(t => [...t, data as Task]);
     setNewTaskTitle('');
     setNewTaskCol(null);
     setLoading(false);
@@ -116,7 +123,12 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
       .select('*, profiles(full_name)')
       .single();
 
-    if (!error && data) setTasks(t => t.map(task => task.id === editTask.id ? data as Task : task));
+    if (error) {
+      setBoardError('Failed to save task: ' + error.message);
+      setLoading(false);
+      return;
+    }
+    if (data) setTasks(t => t.map(task => task.id === editTask.id ? data as Task : task));
     setEditTask(null);
     setLoading(false);
   }
@@ -182,6 +194,13 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
           </button>
         ))}
       </div>
+
+      {boardError && (
+        <div className="mx-6 mt-3 flex items-center justify-between text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+          <span>{boardError}</span>
+          <button onClick={() => setBoardError('')} aria-label="Dismiss" className="ml-3 text-red-400 hover:text-red-700">✕</button>
+        </div>
+      )}
 
       {/* Board */}
       {activeTab === 'board' && (
