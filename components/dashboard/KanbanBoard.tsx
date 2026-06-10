@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { createClient } from '../../lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import TaskActivityFeed from './TaskActivityFeed';
+import ClientUpdatesPanel, { ProjectLink, ProjectMessage } from './ClientUpdatesPanel';
 
 const COLUMNS = [
   { id: 'backlog',     label: 'Backlog',      color: '#94A3B8' },
@@ -43,6 +44,8 @@ interface Props {
   project: { id: string; name: string; color?: string; slug: string };
   initialTasks: Task[];
   initialMilestones: Milestone[];
+  initialLinks: ProjectLink[];
+  initialMessages: ProjectMessage[];
   members: Member[];
   currentUserId: string;
   isAdmin: boolean;
@@ -51,10 +54,10 @@ interface Props {
 const labelCls = 'block text-xs font-medium text-neutral-600 mb-1.5';
 const inputCls = 'w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-parabolica/20 focus:border-parabolica bg-white';
 
-export default function KanbanBoard({ project, initialTasks, initialMilestones, members, currentUserId, isAdmin }: Props) {
+export default function KanbanBoard({ project, initialTasks, initialMilestones, initialLinks, initialMessages, members, currentUserId, isAdmin }: Props) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
-  const [activeTab, setActiveTab] = useState<'board' | 'milestones'>('board');
+  const [activeTab, setActiveTab] = useState<'board' | 'milestones' | 'client updates'>('board');
   const [newTaskCol, setNewTaskCol] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [editTask, setEditTask] = useState<Task | null>(null);
@@ -175,7 +178,7 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
     <div className="flex flex-col h-[calc(100vh-112px)]">
       {/* Tabs */}
       <div className="bg-white border-b border-neutral-200 px-6 flex gap-1 pt-2">
-        {(['board', 'milestones'] as const).map(tab => (
+        {(['board', 'milestones', 'client updates'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -311,6 +314,17 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
               />
             )}
           </div>
+        </div>
+      )}
+
+      {/* Client updates: quick links + important messages shown on the portal */}
+      {activeTab === 'client updates' && (
+        <div className="flex-1 overflow-y-auto p-6">
+          <ClientUpdatesPanel
+            projectId={project.id}
+            initialLinks={initialLinks}
+            initialMessages={initialMessages}
+          />
         </div>
       )}
 
