@@ -464,19 +464,18 @@ function TaskCard({ task, onEdit, onDelete, onMove }: {
   return (
     <div className="group bg-white rounded-lg border border-neutral-200 p-3 shadow-sm hover:border-neutral-300 hover:shadow-md transition-all cursor-pointer relative">
       <div onClick={onEdit} className="flex-1">
-        {/* Priority badge */}
-        {priority && (
-          <span
-            className="inline-block text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mb-1.5"
-            style={{ backgroundColor: `${priority.color}1f`, color: priority.color }}
-          >
-            {priority.label}
-          </span>
-        )}
-
         <p className="text-sm text-neutral-900 font-medium leading-snug">{task.title}</p>
 
-        <div className="flex items-center gap-2 mt-2 flex-wrap">
+        {/* Footer: priority badge + due + elapsed on the left, avatar pinned right */}
+        <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+          {priority && (
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: `${priority.color}1f`, color: priority.color }}
+            >
+              {priority.label}
+            </span>
+          )}
           {task.due_date && (
             <span className="text-[11px] text-neutral-400">
               📅 {new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
