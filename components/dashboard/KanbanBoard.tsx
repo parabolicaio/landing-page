@@ -20,11 +20,18 @@ const PRIORITIES = [
   { id: 'urgent', label: 'Urgent', color: '#EF4444' },
 ] as const;
 
+const TASK_TYPES = [
+  { id: 'bug',         label: 'Bug',         icon: '🐞', color: '#EF4444' },
+  { id: 'feature',     label: 'Feature',     icon: '✨', color: '#0FBAB0' },
+  { id: 'request',     label: 'Request',     icon: '🙋', color: '#6366F1' },
+  { id: 'improvement', label: 'Improvement', icon: '💅', color: '#8B5CF6' },
+] as const;
+
 type ColumnId = typeof COLUMNS[number]['id'];
 
 type Task = {
   id: string; project_id: string; title: string; description: string | null;
-  status: string; priority: string; assignee_id: string | null;
+  status: string; priority: string; task_type?: string; assignee_id: string | null;
   due_date: string | null; position: number;
   assigned_at?: string | null; done_at?: string | null;
   profiles?: { full_name: string | null; avatar_url?: string | null } | null;
@@ -458,6 +465,7 @@ function TaskCard({ task, onEdit, onDelete, onMove }: {
 }) {
   const [showMove, setShowMove] = useState(false);
   const priority = PRIORITIES.find(p => p.id === task.priority);
+  const taskType = TASK_TYPES.find(t => t.id === (task.task_type || 'feature'));
   const elapsed = elapsedSince(task.assigned_at, task.done_at);
   const isDone = task.status === 'done';
 
@@ -466,8 +474,16 @@ function TaskCard({ task, onEdit, onDelete, onMove }: {
       <div onClick={onEdit} className="flex-1">
         <p className="text-sm text-neutral-900 font-medium leading-snug">{task.title}</p>
 
-        {/* Footer: priority badge + due + elapsed on the left, avatar pinned right */}
+        {/* Footer: type + priority badges + due + elapsed on the left, avatar pinned right */}
         <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+          {taskType && (
+            <span
+              className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: `${taskType.color}1f`, color: taskType.color }}
+            >
+              {taskType.icon} {taskType.label}
+            </span>
+          )}
           {priority && (
             <span
               className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
@@ -549,6 +565,7 @@ function TaskEditModal({ task, members, onSave, onClose, loading, currentUserId 
     description: task.description || '',
     status: task.status,
     priority: task.priority,
+    task_type: task.task_type || 'feature',
     assignee_id: task.assignee_id || '',
     due_date: task.due_date || '',
   });
@@ -585,6 +602,12 @@ function TaskEditModal({ task, members, onSave, onClose, loading, currentUserId 
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className={labelCls}>Type</label>
+              <select value={form.task_type} onChange={e => setForm(f => ({ ...f, task_type: e.target.value }))} className={inputCls}>
+                {TASK_TYPES.map(t => <option key={t.id} value={t.id}>{t.icon} {t.label}</option>)}
+              </select>
+            </div>
+            <div>
               <label className={labelCls}>Assignee</label>
               <select value={form.assignee_id} onChange={e => setForm(f => ({ ...f, assignee_id: e.target.value }))} className={inputCls}>
                 <option value="">Unassigned</option>
@@ -620,6 +643,7 @@ function TaskEditModal({ task, members, onSave, onClose, loading, currentUserId 
               description: form.description || null,
               status: form.status,
               priority: form.priority,
+              task_type: form.task_type,
               assignee_id: form.assignee_id || null,
               due_date: form.due_date || null,
             })}
