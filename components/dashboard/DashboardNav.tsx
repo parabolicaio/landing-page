@@ -50,14 +50,14 @@ export default function DashboardNav({ user, profile }: Props) {
           </Link>
         )}
 
-        <div className="flex items-center gap-2">
+        <Link href="/dashboard/account" className="flex items-center gap-2 hover:opacity-80 transition-opacity" title="Account settings">
           <div className="w-8 h-8 rounded-full bg-parabolica flex items-center justify-center text-white text-xs font-bold">
             {initials}
           </div>
           <span className="text-sm text-neutral-600 hidden sm:block">
             {profile?.full_name || user.email}
           </span>
-        </div>
+        </Link>
 
         <button
           onClick={signOut}
