@@ -34,7 +34,7 @@ export default async function ProjectPage({ params }: Props) {
 
   const { data: tasks } = await supabase
     .from('tasks')
-    .select('*, profiles(full_name)')
+    .select('*, profiles(full_name, avatar_url)')
     .eq('project_id', projectId)
     .order('position', { ascending: true });
 
@@ -46,7 +46,7 @@ export default async function ProjectPage({ params }: Props) {
 
   const { data: rawMembers } = await supabase
     .from('project_members')
-    .select('user_id, role, profiles(full_name)')
+    .select('user_id, role, profiles(full_name, avatar_url)')
     .eq('project_id', projectId);
 
   const [{ data: links }, { data: messages }] = await Promise.all([
