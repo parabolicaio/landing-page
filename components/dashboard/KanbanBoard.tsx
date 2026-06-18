@@ -26,7 +26,8 @@ type Task = {
   id: string; project_id: string; title: string; description: string | null;
   status: string; priority: string; assignee_id: string | null;
   due_date: string | null; position: number;
-  profiles?: { full_name: string | null } | null;
+  assigned_at?: string | null; done_at?: string | null;
+  profiles?: { full_name: string | null; avatar_url?: string | null } | null;
 };
 
 type Milestone = {
@@ -37,7 +38,7 @@ type Milestone = {
 
 type Member = {
   user_id: string; role: string;
-  profiles?: { full_name: string | null } | null;
+  profiles?: { full_name: string | null; avatar_url?: string | null } | null;
 };
 
 interface Props {
@@ -54,6 +55,50 @@ interface Props {
 const labelCls = 'block text-xs font-medium text-neutral-600 mb-1.5';
 const inputCls = 'w-full px-3 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-parabolica/20 focus:border-parabolica bg-white';
 
+// Deterministic colour per user so an avatar keeps the same colour everywhere
+const AVATAR_COLORS = ['#0FBAB0', '#6366F1', '#F59E0B', '#EF4444', '#10B981', '#8B5CF6', '#EC4899', '#F97316'];
+function avatarColor(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+function initialsOf(name: string | null | undefined, fallback: string) {
+  const src = name || fallback;
+  return src.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function Avatar({ name, avatarUrl, seed, size = 24 }: {
+  name: string | null | undefined; avatarUrl?: string | null; seed: string; size?: number;
+}) {
+  if (avatarUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={avatarUrl} alt={name || ''} title={name || ''} className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />;
+  }
+  return (
+    <div
+      title={name || ''}
+      className="rounded-full flex items-center justify-center text-white font-bold shrink-0"
+      style={{ width: size, height: size, backgroundColor: avatarColor(seed), fontSize: size * 0.4 }}
+    >
+      {initialsOf(name, seed.slice(0, 2))}
+    </div>
+  );
+}
+
+// "since assigned" — freezes at done_at once the task is done
+function elapsedSince(assignedAt?: string | null, doneAt?: string | null): string | null {
+  if (!assignedAt) return null;
+  const start = new Date(assignedAt).getTime();
+  const end = doneAt ? new Date(doneAt).getTime() : Date.now();
+  const mins = Math.max(0, Math.floor((end - start) / 60000));
+  if (mins < 60) return '<1h';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remH = hours % 24;
+  return remH > 0 ? `${days}d ${remH}h` : `${days}d`;
+}
+
 export default function KanbanBoard({ project, initialTasks, initialMilestones, initialLinks, initialMessages, members, currentUserId, isAdmin }: Props) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
@@ -65,6 +110,7 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
   const [showNewMilestone, setShowNewMilestone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [boardError, setBoardError] = useState('');
+  const [filterAssignee, setFilterAssignee] = useState<string>(''); // '' = everyone
   const supabase = createClient();
   const router = useRouter();
 
@@ -85,7 +131,7 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
         priority: 'medium',
         position: tasks.filter(t => t.status === status).length,
       })
-      .select('*, profiles(full_name)')
+      .select('*, profiles(full_name, avatar_url)')
       .single();
 
     if (error) {
@@ -123,7 +169,7 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
       .from('tasks')
       .update(updates)
       .eq('id', editTask.id)
-      .select('*, profiles(full_name)')
+      .select('*, profiles(full_name, avatar_url)')
       .single();
 
     if (error) {
@@ -172,7 +218,12 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
   }
 
   const tasksByCol = (status: string) =>
-    tasks.filter(t => t.status === status).sort((a, b) => a.position - b.position);
+    tasks
+      .filter(t => t.status === status)
+      .filter(t => !filterAssignee || t.assignee_id === filterAssignee)
+      .sort((a, b) => a.position - b.position);
+
+  const filteredCount = tasks.filter(t => !filterAssignee || t.assignee_id === filterAssignee).length;
 
   return (
     <div className="flex flex-col h-[calc(100vh-112px)]">
@@ -208,6 +259,54 @@ export default function KanbanBoard({ project, initialTasks, initialMilestones, 
       {/* Board */}
       {activeTab === 'board' && (
         <div className="flex-1 overflow-x-auto p-6">
+          {/* Assignee filter */}
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
+            <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Filter</span>
+            <button
+              onClick={() => setFilterAssignee(filterAssignee === currentUserId ? '' : currentUserId)}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+                filterAssignee === currentUserId
+                  ? 'bg-parabolica text-white border-parabolica'
+                  : 'text-neutral-600 border-neutral-200 hover:border-parabolica'
+              }`}
+            >
+              My tasks
+            </button>
+
+            {/* Member avatars — click to filter */}
+            <div className="flex items-center gap-1">
+              {members.map(m => (
+                <button
+                  key={m.user_id}
+                  onClick={() => setFilterAssignee(filterAssignee === m.user_id ? '' : m.user_id)}
+                  className={`rounded-full transition-all ${filterAssignee === m.user_id ? 'ring-2 ring-parabolica ring-offset-1' : 'opacity-70 hover:opacity-100'}`}
+                  title={m.profiles?.full_name || m.user_id.slice(0, 8)}
+                >
+                  <Avatar name={m.profiles?.full_name} avatarUrl={m.profiles?.avatar_url} seed={m.user_id} size={26} />
+                </button>
+              ))}
+            </div>
+
+            <select
+              value={filterAssignee}
+              onChange={e => setFilterAssignee(e.target.value)}
+              className="text-xs border border-neutral-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-parabolica"
+            >
+              <option value="">All assignees</option>
+              {members.map(m => (
+                <option key={m.user_id} value={m.user_id}>
+                  {m.profiles?.full_name || m.user_id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+
+            {filterAssignee && (
+              <button onClick={() => setFilterAssignee('')} className="text-xs text-neutral-400 hover:text-neutral-700">
+                Clear ({filteredCount})
+              </button>
+            )}
+          </div>
+
           <div className="flex gap-4 min-w-max">
             {COLUMNS.map(col => (
               <div key={col.id} className="w-72 flex flex-col">
@@ -359,23 +458,46 @@ function TaskCard({ task, onEdit, onDelete, onMove }: {
 }) {
   const [showMove, setShowMove] = useState(false);
   const priority = PRIORITIES.find(p => p.id === task.priority);
+  const elapsed = elapsedSince(task.assigned_at, task.done_at);
+  const isDone = task.status === 'done';
 
   return (
     <div className="group bg-white rounded-lg border border-neutral-200 p-3 shadow-sm hover:border-neutral-300 hover:shadow-md transition-all cursor-pointer relative">
       <div onClick={onEdit} className="flex-1">
-        <div className="flex items-start gap-2">
-          <div className="mt-1 w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: priority?.color || '#94A3B8' }} />
-          <p className="text-sm text-neutral-900 font-medium leading-snug">{task.title}</p>
-        </div>
-        <div className="flex items-center gap-2 mt-2 ml-4">
+        {/* Priority badge */}
+        {priority && (
+          <span
+            className="inline-block text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full mb-1.5"
+            style={{ backgroundColor: `${priority.color}1f`, color: priority.color }}
+          >
+            {priority.label}
+          </span>
+        )}
+
+        <p className="text-sm text-neutral-900 font-medium leading-snug">{task.title}</p>
+
+        <div className="flex items-center gap-2 mt-2 flex-wrap">
           {task.due_date && (
             <span className="text-[11px] text-neutral-400">
               📅 {new Date(task.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
             </span>
           )}
-          {task.profiles?.full_name && (
-            <span className="text-[11px] text-neutral-400 truncate max-w-[80px]">
-              👤 {task.profiles.full_name.split(' ')[0]}
+          {elapsed && (
+            <span
+              className="text-[11px] text-neutral-400"
+              title={isDone ? 'Time from assignment to completion' : 'Time since assigned'}
+            >
+              {isDone ? '✓' : '⏱'} {elapsed}
+            </span>
+          )}
+          {task.assignee_id && (
+            <span className="ml-auto">
+              <Avatar
+                name={task.profiles?.full_name}
+                avatarUrl={task.profiles?.avatar_url}
+                seed={task.assignee_id}
+                size={22}
+              />
             </span>
           )}
         </div>
